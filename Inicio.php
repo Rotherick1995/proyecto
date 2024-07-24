@@ -25,7 +25,7 @@
 <body>
     <header>UNIVERSIDAD PRIVADA DOMINGO SAVIO</header>
     <div class="content">HOLA SOY ROTHERICK CALDERON</div>
-    <div class="content">RAMA 2</div>
+    <div class="content">RAMA 2.0</div>
 
 </body>
 </html>
