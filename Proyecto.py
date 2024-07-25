@@ -5,7 +5,6 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from sqlalchemy import create_engine
 import folium
-from io import BytesIO
 import webbrowser
 
 class WeatherApp:
@@ -119,11 +118,20 @@ class AnalysisWindow:
         self.summary_button.pack(pady=10)
 
     def plot_temperature(self):
-        self.df.set_index('fecha')[['temperatura', 'temperatura_max', 'temperatura_min']].plot()
-        plt.title('Tendencias de Temperatura')
-        plt.xlabel('Fecha')
-        plt.ylabel('Temperatura (°C)')
-        plt.show()
+        try:
+            if 'fecha' in self.df.columns and 'temperatura' in self.df.columns:
+                print(self.df.head())  # Verifica los datos
+                # Asegúrate de que las fechas están en el formato correcto
+                self.df['fecha'] = pd.to_datetime(self.df['fecha'])
+                self.df.set_index('fecha')[['temperatura', 'temperatura_max', 'temperatura_min']].plot()
+                plt.title('Tendencias de Temperatura')
+                plt.xlabel('Fecha')
+                plt.ylabel('Temperatura (°C)')
+                plt.show()
+            else:
+                messagebox.showwarning("Warning", "Datos de temperatura no encontrados.")
+        except Exception as e:
+            messagebox.showerror("Error", f"Se produjo un error al mostrar el gráfico: {e}")
 
     def show_summary(self):
         summary = self.df.describe()
