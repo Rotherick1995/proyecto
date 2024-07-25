@@ -3,6 +3,8 @@ import tkinter as tk
 from tkinter import filedialog, simpledialog, messagebox
 import os
 import re
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 # Función para extraer año, mes y día del nombre del archivo
 def extract_date_from_filename(filename):
@@ -67,6 +69,39 @@ def show_dataset(dataset):
     scroll.pack(side=tk.RIGHT, fill=tk.Y)
     text.config(yscrollcommand=scroll.set)
 
+# Función para mostrar gráficos estadísticos
+def show_statistical_charts(dataset):
+    if dataset.empty:
+        messagebox.showerror("Error", "El dataset está vacío.")
+        return
+
+    # Crear gráficos para cada columna numérica
+    numeric_cols = dataset.select_dtypes(include=[float, int]).columns
+    if not numeric_cols.empty:
+        for col in numeric_cols:
+            fig, ax = plt.subplots(2, 1, figsize=(10, 8))
+
+            # Histograma
+            dataset[col].hist(bins=30, ax=ax[0])
+            ax[0].set_title(f'Histograma de {col}')
+            ax[0].set_xlabel(col)
+            ax[0].set_ylabel('Frecuencia')
+
+            # Boxplot
+            dataset.boxplot(column=col, ax=ax[1])
+            ax[1].set_title(f'Boxplot de {col}')
+
+            chart_path = os.path.join(os.getcwd(), f'{col}_charts.png')
+            fig.savefig(chart_path)
+
+            top = tk.Toplevel()
+            top.title(f'Gráficos de {col}')
+            canvas = FigureCanvasTkAgg(fig, master=top)
+            canvas.draw()
+            canvas.get_tk_widget().pack(expand=True, fill='both')
+
+            messagebox.showinfo("Éxito", f"Los gráficos se han guardado en '{chart_path}'.")
+
 # Función principal de la interfaz gráfica
 def main():
     def select_folder():
@@ -92,6 +127,13 @@ def main():
         except Exception as e:
             messagebox.showerror("Error", f"Ocurrió un error: {e}")
     
+    def generate_charts():
+        try:
+            dataset = pd.read_excel('Out.xlsx')
+            show_statistical_charts(dataset)
+        except Exception as e:
+            messagebox.showerror("Error", f"Ocurrió un error al generar los gráficos: {e}")
+
     root = tk.Tk()
     root.title("Proceso ETL")
 
@@ -100,6 +142,7 @@ def main():
     tk.Button(root, text="Seleccionar Carpeta", command=select_folder).pack(pady=10)
     tk.Label(root, textvariable=folder_var).pack(pady=10)
     tk.Button(root, text="Iniciar Proceso ETL", command=run_etl_process).pack(pady=10)
+    tk.Button(root, text="Generar Gráficos Estadísticos", command=generate_charts).pack(pady=10)
 
     root.mainloop()
 
