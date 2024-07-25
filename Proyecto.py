@@ -7,7 +7,6 @@ from sqlalchemy import create_engine
 import folium
 import webbrowser
 import matplotlib
-
 matplotlib.use('TkAgg')  # Asegura el uso del backend TkAgg
 
 class WeatherApp:
@@ -70,15 +69,13 @@ class WeatherApp:
     def show_map(self):
         if not self.df.empty:
             try:
-                lat = self.df['latitud'].iloc[0]  # Utilizar la latitud del primer registro
-                lon = self.df['longitud'].iloc[0]  # Utilizar la longitud del primer registro
+                lat = -16.5000000  # Latitud de La Paz, Bolivia
+                lon = -68.1500000  # Longitud de La Paz, Bolivia
 
                 weather_map = folium.Map(location=[lat, lon], zoom_start=12)
                 folium.Marker(
                     location=[lat, lon],
-                    popup=f"Temperatura Máxima: {self.df['Temperatura Máxima'].iloc[-1]}°C\n"
-                          f"Temperatura Mínima: {self.df['Temperatura Mínima'].iloc[-1]}°C\n"
-                          f"Humedad Relativa Media: {self.df['Humedad Relativa Media'].iloc[-1]}%",
+                    popup=f"Temperatura: {self.df['temperatura'].iloc[-1]}°C\nHumedad: {self.df['humedad'].iloc[-1]}%",
                     icon=folium.Icon(color='blue')
                 ).add_to(weather_map)
 
@@ -92,14 +89,9 @@ class WeatherApp:
             messagebox.showwarning("Warning", "No hay datos cargados.")
 
     def extract_data_from_excel(self, file_path):
-        df = pd.read_excel(file_path)
-        df.columns = [col.strip('"') for col in df.columns]  # Quitar comillas de los nombres de las columnas
-        return df
+        return pd.read_excel(file_path)
 
     def transform_weather_data(self, df):
-        # Verificar filas con valores nulos en las columnas 'gestion', 'mes', 'dia'
-        df = df.dropna(subset=['gestion', 'mes', 'dia'])
-        # Crear una columna de fecha combinando gestion, mes y dia
         df['fecha'] = pd.to_datetime(df[['gestion', 'mes', 'dia']])
         return df
 
@@ -114,9 +106,7 @@ class WeatherApp:
             'presion': [data['main']['pressure']],
             'viento_velocidad': [data['wind']['speed']],
             'viento_direccion': [data['wind']['deg']],
-            'descripcion': [data['weather'][0]['description']],
-            'latitud': [data['coord']['lat']],
-            'longitud': [data['coord']['lon']]
+            'descripcion': [data['weather'][0]['description']]
         })
         return df
 
@@ -143,17 +133,17 @@ class AnalysisWindow:
 
     def plot_temperature(self):
         try:
-            if 'fecha' in self.df.columns and 'Temperatura Máxima' in self.df.columns:
+            if 'fecha' in self.df.columns and 'temperatura' in self.df.columns:
                 # Asegúrate de que las fechas están en el formato correcto
                 self.df['fecha'] = pd.to_datetime(self.df['fecha'])
                 if self.df.empty:
                     messagebox.showwarning("Warning", "El DataFrame está vacío.")
                     return
-                if not {'Temperatura Máxima', 'Temperatura Mínima'}.issubset(self.df.columns):
+                if not {'temperatura', 'temperatura_max', 'temperatura_min'}.issubset(self.df.columns):
                     messagebox.showwarning("Warning", "Faltan columnas en los datos.")
                     return
                 # Crear gráfico y guardarlo en un archivo
-                ax = self.df.set_index('fecha')[['Temperatura Máxima', 'Temperatura Mínima']].plot()
+                ax = self.df.set_index('fecha')[['temperatura', 'temperatura_max', 'temperatura_min']].plot()
                 plt.title('Tendencias de Temperatura')
                 plt.xlabel('Fecha')
                 plt.ylabel('Temperatura (°C)')
