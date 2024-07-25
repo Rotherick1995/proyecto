@@ -19,7 +19,7 @@ class WeatherApp:
         # Ajustar tamaño de la ventana principal al 45% de la pantalla y centrar
         self.resize_and_center_window(self.root, 0.45)
 
-        self.api_key = 'ef18dc6e5bb7111d78e0046d9dfefd57'  # Tu clave API de OpenWeatherMap
+        self.api_key = 'TU_CLAVE_API_DE_WEATHERBIT'  # Tu clave API de Weatherbit
         self.df = pd.DataFrame()  # Inicializa un DataFrame vacío
 
         # Cuadro de texto para ingresar la ciudad
@@ -55,14 +55,24 @@ class WeatherApp:
             messagebox.showwarning("Warning", "Por favor ingrese una ciudad.")
             return
 
-        url = f'http://api.openweathermap.org/data/2.5/weather?q={city}&appid={self.api_key}&units=metric'
         try:
-            response = requests.get(url)
+            # Obtener latitud y longitud de la ciudad
+            location_url = f'http://api.openweathermap.org/data/2.5/weather?q={city}&appid=ef18dc6e5bb7111d78e0046d9dfefd57'
+            location_response = requests.get(location_url)
+            location_data = location_response.json()
+            lat = location_data['coord']['lat']
+            lon = location_data['coord']['lon']
+
+            # Obtener datos históricos de los últimos 30 días
+            end_date = datetime.now()
+            start_date = end_date - timedelta(days=30)
+            weather_url = f'https://api.weatherbit.io/v2.0/history/daily?lat={lat}&lon={lon}&start_date={start_date.strftime("%Y-%m-%d")}&end_date={end_date.strftime("%Y-%m-%d")}&key={self.api_key}'
+            response = requests.get(weather_url)
             response.raise_for_status()  # Lanza una excepción para códigos de estado HTTP erróneos
             data = response.json()
             new_data = self.transform_weather_data_from_api(data)
             self.df = pd.concat([self.df, new_data], ignore_index=True)  # Acumula los datos en el DataFrame
-            db_url = 'sqlite:///weather_data.db'  # URL de la base de datos
+            db_url = 'mysql+mysqlconnector://root:Rfcm8329330@localhost/proyecto'  # URL de la base de datos
             self.load_weather_data(self.df, db_url)
             messagebox.showinfo("Info", f"Datos cargados y transformados desde API para {city}")
         except requests.RequestException as e:
@@ -83,7 +93,7 @@ class WeatherApp:
                 weather_map = folium.Map(location=[lat, lon], zoom_start=12)
                 folium.Marker(
                     location=[lat, lon],
-                    popup=f"Temperatura: {self.df['temperatura'].iloc[-1]}°C\nHumedad: {self.df['humedad'].iloc[-1]}%",
+                    popup=f"Temperatura: {self.df['temp'].iloc[-1]}°C\nHumedad: {self.df['rh'].iloc[-1]}%",
                     icon=folium.Icon(color='blue')
                 ).add_to(weather_map)
 
@@ -98,17 +108,9 @@ class WeatherApp:
 
     def transform_weather_data_from_api(self, data):
         # Transformar los datos de la API en un DataFrame
-        df = pd.DataFrame({
-            'fecha': [pd.to_datetime('now')],
-            'temperatura': [data['main']['temp']],
-            'temperatura_max': [data['main']['temp_max']],
-            'temperatura_min': [data['main']['temp_min']],
-            'humedad': [data['main']['humidity']],
-            'presion': [data['main']['pressure']],
-            'viento_velocidad': [data['wind']['speed']],
-            'viento_direccion': [data['wind']['deg']],
-            'descripcion': [data['weather'][0]['description']]
-        })
+        records = data['data']
+        df = pd.DataFrame(records)
+        df['datetime'] = pd.to_datetime(df['datetime'])
         return df
 
     def load_weather_data(self, df, db_url):
@@ -146,17 +148,17 @@ class AnalysisWindow:
 
     def plot_temperature(self):
         try:
-            if 'fecha' in self.df.columns and 'temperatura' in self.df.columns:
+            if 'datetime' in self.df.columns and 'temp' in self.df.columns:
                 # Asegúrate de que las fechas están en el formato correcto
-                self.df['fecha'] = pd.to_datetime(self.df['fecha'])
+                self.df['datetime'] = pd.to_datetime(self.df['datetime'])
                 if self.df.empty:
                     messagebox.showwarning("Warning", "El DataFrame está vacío.")
                     return
-                if not {'temperatura', 'temperatura_max', 'temperatura_min'}.issubset(self.df.columns):
+                if not {'temp', 'max_temp', 'min_temp'}.issubset(self.df.columns):
                     messagebox.showwarning("Warning", "Faltan columnas en los datos.")
                     return
                 # Crear gráfico y guardarlo en un archivo
-                ax = self.df.set_index('fecha')[['temperatura', 'temperatura_max', 'temperatura_min']].plot()
+                ax = self.df.set_index('datetime')[['temp', 'max_temp', 'min_temp']].plot()
                 plt.title('Tendencias de Temperatura')
                 plt.xlabel('Fecha')
                 plt.ylabel('Temperatura (°C)')
@@ -172,35 +174,15 @@ class AnalysisWindow:
 
     def show_summary(self):
         try:
-            if 'fecha' in self.df.columns:
-                # Filtra los datos del último mes
-                last_month = datetime.now() - timedelta(days=30)
-                filtered_df = self.df[self.df['fecha'] >= last_month]
-                
-                if filtered_df.empty:
-                    messagebox.showwarning("Warning", "No hay datos disponibles para el último mes.")
-                    return
-
-                # Crear una ventana de resumen
-                summary_window = tk.Toplevel(self.root)
-                summary_window.title("Resumen de Datos del Último Mes")
-                self.resize_and_center_window(summary_window, 0.80)
-
-                # Crear un widget de texto con barras de desplazamiento
-                text_area = scrolledtext.ScrolledText(summary_window, wrap=tk.WORD)
-                text_area.pack(expand=True, fill='both')
-                
-                # Crear un resumen más estético
-                summary = filtered_df.describe()
-                summary_str = summary.to_string()
-
-                # Insertar el resumen en el widget de texto
-                text_area.insert(tk.END, f"Resumen de Datos del Último Mes:\n\n{summary_str}")
-                text_area.config(state=tk.DISABLED)  # Hacer el texto no editable
-            else:
-                messagebox.showwarning("Warning", "No hay datos de fecha disponibles.")
+            summary = self.df.describe().transpose()
+            summary_window = tk.Toplevel(self.root)
+            summary_window.title("Resumen de Datos")
+            summary_text = scrolledtext.ScrolledText(summary_window, width=80, height=20)
+            summary_text.pack(pady=10, padx=10)
+            summary_text.insert(tk.END, summary.to_string())
+            summary_text.config(state=tk.DISABLED)
         except Exception as e:
-            messagebox.showerror("Error", f"Se produjo un error al mostrar el resumen: {e}")
+            messagebox.showerror("Error", f"Se produjo un error al mostrar el resumen de datos: {e}")
 
 if __name__ == "__main__":
     root = tk.Tk()
