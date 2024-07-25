@@ -92,15 +92,16 @@ class WeatherApp:
             messagebox.showwarning("Warning", "No hay datos cargados.")
 
     def extract_data_from_excel(self, file_path):
-        return pd.read_excel(file_path)
+        df = pd.read_excel(file_path)
+        df.columns = [col.strip('"') for col in df.columns]  # Quitar comillas de los nombres de las columnas
+        return df
 
     def transform_weather_data(self, df):
+        # Verificar filas con valores nulos en las columnas 'gestion', 'mes', 'dia'
+        df = df.dropna(subset=['gestion', 'mes', 'dia'])
         # Crear una columna de fecha combinando gestion, mes y dia
-        valid_rows = df.dropna(subset=['gestion', 'mes', 'dia'])
-        valid_rows['fecha'] = pd.to_datetime(valid_rows[['gestion', 'mes', 'dia']])
-        # Renombrar columnas para quitar comillas
-        valid_rows.rename(columns=lambda x: x.strip('"'), inplace=True)
-        return valid_rows
+        df['fecha'] = pd.to_datetime(df[['gestion', 'mes', 'dia']])
+        return df
 
     def transform_weather_data_from_api(self, data):
         # Transformar los datos de la API en un DataFrame
