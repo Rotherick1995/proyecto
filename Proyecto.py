@@ -22,6 +22,12 @@ class WeatherApp:
         self.api_key = 'ef18dc6e5bb7111d78e0046d9dfefd57'  # Tu clave API de OpenWeatherMap
         self.df = pd.DataFrame()  # Inicializa un DataFrame vacío
 
+        # Cuadro de texto para ingresar la ciudad
+        self.city_entry_label = tk.Label(root, text="Ingrese la ciudad:")
+        self.city_entry_label.pack(pady=5)
+        self.city_entry = tk.Entry(root)
+        self.city_entry.pack(pady=5)
+
         # Botón para cargar datos desde API
         self.api_button = tk.Button(root, text="Cargar datos desde API", command=self.load_data_from_api)
         self.api_button.pack(pady=10)
@@ -44,7 +50,11 @@ class WeatherApp:
         window.geometry(f"{width}x{height}+{x}+{y}")
 
     def load_data_from_api(self):
-        city = 'La Paz, BO'  # Ciudad deseada en Bolivia
+        city = self.city_entry.get()  # Obtener la ciudad desde el cuadro de texto
+        if not city:
+            messagebox.showwarning("Warning", "Por favor ingrese una ciudad.")
+            return
+
         url = f'http://api.openweathermap.org/data/2.5/weather?q={city}&appid={self.api_key}&units=metric'
         try:
             response = requests.get(url)
