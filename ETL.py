@@ -1,150 +1,112 @@
 import pandas as pd
-import tkinter as tk
-from tkinter import filedialog, simpledialog, messagebox
-import os
-import re
+import streamlit as st
+import io
 import matplotlib.pyplot as plt
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+import numpy as np
+import re
 
-# Función para extraer año, mes y día del nombre del archivo
 def extract_date_from_filename(filename):
-    match = re.search(r'\.(\d{4})\.(\d{2})\.(\d{2})\.', filename)
+    match = re.search(r'\d{4}\.\d{2}\.\d{2}', filename)
     if match:
-        return match.groups()
-    return ("", "", "")
+        year, month, day = match.group(0).split('.')
+        return int(year), int(month), int(day)
+    return None, None, None
 
-# Función para procesar archivos Excel
-def process_files(folder_path, columns_range, start_row):
-    dataset = pd.DataFrame()
-    
-    # Obtener lista de archivos Excel en la carpeta
-    files = [f for f in os.listdir(folder_path) if f.endswith('.xlsx')]
-    
-    if not files:
-        messagebox.showerror("Error", "No se encontraron archivos Excel en la carpeta.")
-        return dataset
-    
-    # Iterar sobre cada archivo Excel
+def process_files(files, columns_range, start_row):
+    all_data = []
     for file in files:
-        file_path = os.path.join(folder_path, file)
-        
         try:
-            # Leer solo la primera hoja con nombre "ITEM_O"
-            df = pd.read_excel(file_path, sheet_name="ITEM_O", header=None, skiprows=start_row-1)
-            
-            # Seleccionar columnas especificadas
-            columns = list(range(columns_range[0], columns_range[1] + 1))
-            df = df.iloc[:, columns]
-            
-            # Extraer fecha del nombre del archivo
-            year, month, day = extract_date_from_filename(file)
-            df['ANIO'] = year
-            df['MES'] = month
-            df['DIA'] = day
-            
-            # Concatenar al dataset final
-            dataset = pd.concat([dataset, df], ignore_index=True)
-        
+            df = pd.read_excel(file, sheet_name="ITEM_O", skiprows=start_row-1, usecols=columns_range)
+            filename = file.name
+            year, month, day = extract_date_from_filename(filename)
+            if year is not None:
+                df['ANIO'] = year
+                df['MES'] = month
+                df['DIA'] = day
+                all_data.append(df)
+            else:
+                st.warning(f"Filename {filename} does not match the expected date format.")
         except Exception as e:
-            messagebox.showerror("Error", f"Error al procesar el archivo {file}: {e}")
-    
-    return dataset
+            st.error(f"Error processing file {file.name}: {e}")
 
-# Función para guardar el dataset en un archivo Excel
-def save_to_excel(dataset):
+    if all_data:
+        combined_df = pd.concat(all_data, ignore_index=True)
+        st.write(f"Processed {len(all_data)} files.")
+        return combined_df
+    else:
+        st.warning("No data was processed from the provided files.")
+        return pd.DataFrame()  # Return an empty DataFrame if no data is processed
+
+def save_with_report_and_graphs(df):
     try:
-        dataset.to_excel('Out.xlsx', index=False)
-        messagebox.showinfo("Éxito", "El dataset se ha guardado correctamente en 'Out.xlsx'.")
+        # Create a summary report
+        summary = df.describe(include='all')
+
+        # Identify the numeric columns
+        numeric_columns = df.select_dtypes(include=[np.number]).columns.tolist()
+        if not numeric_columns:
+            raise ValueError("No numeric columns found in the dataframe")
+
+        # Use the first numeric column for the graph
+        value_column = numeric_columns[0]
+        year_column = 'ANIO' if 'ANIO' in df.columns else 'AÑO'
+
+        # Create the histogram with customized style
+        plt.style.use('dark_background')
+        plt.figure(figsize=(12, 8))
+        for year in df[year_column].unique():
+            year_data = df[df[year_column] == year]
+            plt.hist(year_data[value_column], bins=20, alpha=0.5, label=str(year), color='green')
+        
+        plt.title(f"Histograma de {value_column} por Año", color='white')
+        plt.xlabel(value_column, color='white')
+        plt.ylabel("Frecuencia", color='white')
+        plt.legend(title="Año")
+        plt.grid(True, color='white')
+        
+        # Save plot to BytesIO object
+        img_stream = io.BytesIO()
+        plt.savefig(img_stream, format='png')
+        plt.close()
+        img_stream.seek(0)
+
+        return summary, img_stream
     except Exception as e:
-        messagebox.showerror("Error", f"No se pudo guardar el archivo: {e}")
+        st.error(f"Error generating report: {e}")
+        return None, None
 
-# Función para mostrar el dataset en una ventana emergente
-def show_dataset(dataset):
-    top = tk.Toplevel()
-    top.title("Dataset Final")
-    text = tk.Text(top)
-    text.pack(expand=True, fill='both')
-    text.insert(tk.END, dataset.to_string())
-    scroll = tk.Scrollbar(top, command=text.yview)
-    scroll.pack(side=tk.RIGHT, fill=tk.Y)
-    text.config(yscrollcommand=scroll.set)
-
-# Función para mostrar gráficos estadísticos
-def show_statistical_charts(dataset):
-    if dataset.empty:
-        messagebox.showerror("Error", "El dataset está vacío.")
-        return
-
-    # Crear gráficos para cada columna numérica
-    numeric_cols = dataset.select_dtypes(include=[float, int]).columns
-    if not numeric_cols.empty:
-        for col in numeric_cols:
-            fig, ax = plt.subplots(2, 1, figsize=(10, 8))
-
-            # Histograma
-            dataset[col].hist(bins=30, ax=ax[0])
-            ax[0].set_title(f'Histograma de {col}')
-            ax[0].set_xlabel(col)
-            ax[0].set_ylabel('Frecuencia')
-
-            # Boxplot
-            dataset.boxplot(column=col, ax=ax[1])
-            ax[1].set_title(f'Boxplot de {col}')
-
-            chart_path = os.path.join(os.getcwd(), f'{col}_charts.png')
-            fig.savefig(chart_path)
-
-            top = tk.Toplevel()
-            top.title(f'Gráficos de {col}')
-            canvas = FigureCanvasTkAgg(fig, master=top)
-            canvas.draw()
-            canvas.get_tk_widget().pack(expand=True, fill='both')
-
-            messagebox.showinfo("Éxito", f"Los gráficos se han guardado en '{chart_path}'.")
-
-# Función principal de la interfaz gráfica
 def main():
-    def select_folder():
-        folder_path = filedialog.askdirectory()
-        if folder_path:
-            folder_var.set(folder_path)
-    
-    def run_etl_process():
-        try:
-            folder_path = folder_var.get()
-            columns_start = int(simpledialog.askstring("Entrada", "Ingrese la columna inicial (1-indexed):")) - 1
-            columns_end = int(simpledialog.askstring("Entrada", "Ingrese la columna final (1-indexed):")) - 1
-            start_row = int(simpledialog.askstring("Entrada", "Ingrese la fila inicial (1-indexed):"))
-            
-            if columns_start < 0 or columns_end < 0 or start_row < 1:
-                raise ValueError("Los valores deben ser números positivos enteros.")
-            
-            dataset = process_files(folder_path, (columns_start, columns_end), start_row)
-            
-            if not dataset.empty:
-                show_dataset(dataset)
-                save_to_excel(dataset)
-        except Exception as e:
-            messagebox.showerror("Error", f"Ocurrió un error: {e}")
-    
-    def generate_charts():
-        try:
-            dataset = pd.read_excel('Out.xlsx')
-            show_statistical_charts(dataset)
-        except Exception as e:
-            messagebox.showerror("Error", f"Ocurrió un error al generar los gráficos: {e}")
+    st.title("Procesos ETL Rotherick")
 
-    root = tk.Tk()
-    root.title("Proceso ETL")
+    # File uploader
+    uploaded_files = st.file_uploader("Carga Archivos Excel", type="xlsx", accept_multiple_files=True)
 
-    folder_var = tk.StringVar()
+    columns_range = st.text_input("Rango de Columnas (e.g., A:I):")
+    start_row = st.number_input("Fila de Inicio:", min_value=1, value=1)
 
-    tk.Button(root, text="Seleccionar Carpeta", command=select_folder).pack(pady=10)
-    tk.Label(root, textvariable=folder_var).pack(pady=10)
-    tk.Button(root, text="Iniciar Proceso ETL", command=run_etl_process).pack(pady=10)
-    tk.Button(root, text="Generar Gráficos Estadísticos", command=generate_charts).pack(pady=10)
+    if st.button("Ejecutar ETL"):
+        if uploaded_files and columns_range:
+            with st.spinner('Procesando Archivos...'):
+                df_final = process_files(uploaded_files, columns_range, start_row)
+                if not df_final.empty:
+                    st.write("Data Preview:")
+                    st.dataframe(df_final)
+                    st.session_state.df_final = df_final  # Save the dataframe to session state
+                    st.success("Datos Procesados Satisfactoriamente!")
+                else:
+                    st.warning("Datos No Encontrados. Revisa el contenido del archivo.")
+        else:
+            st.warning("Por favor cargar los archivos y especifica el rango de columnas y la fila inicial.")
 
-    root.mainloop()
+    if st.button("Generar Reporte Gráfico"):
+        if 'df_final' in st.session_state and not st.session_state.df_final.empty:
+            summary, img_stream = save_with_report_and_graphs(st.session_state.df_final)
+            if summary is not None:
+                st.write("Resumen de Reporte:")
+                st.write(summary)
+                st.image(img_stream)
+        else:
+            st.warning("No datos disponibles para generar reporte. Primeramente ejecute el proceso ETL.")
 
 if __name__ == "__main__":
     main()
