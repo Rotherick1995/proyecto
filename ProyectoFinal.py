@@ -351,5 +351,6 @@ if st.session_state.diagnosis_mode:
     # Display average biomarkers and heatmap
     
 
+
     # Run the prediction model
     train_and_predict_model(data)
